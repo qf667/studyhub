@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd client && npm install && npm run build && cd ../server && npm install",
+  "buildCommand": "cd client && npm install && npx vite build && cd ../server && npm install",
   "outputDirectory": "client/dist",
   "installCommand": "npm install",
   "framework": null,
