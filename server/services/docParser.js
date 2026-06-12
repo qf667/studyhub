@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-async function parsePDF(filePath) {
+async function parsePDF(input) {
   try {
     const pdfParse = require('pdf-parse');
-    const buffer = fs.readFileSync(filePath);
+    const buffer = Buffer.isBuffer(input) ? input : fs.readFileSync(input);
     const data = await pdfParse(buffer);
     return data.text;
   } catch (e) {
@@ -13,10 +13,14 @@ async function parsePDF(filePath) {
   }
 }
 
-async function parseWord(filePath) {
+async function parseWord(input) {
   try {
     const mammoth = require('mammoth');
-    const result = await mammoth.extractRawText({ path: filePath });
+    if (Buffer.isBuffer(input)) {
+      const result = await mammoth.extractRawText({ buffer: input });
+      return result.value;
+    }
+    const result = await mammoth.extractRawText({ path: input });
     return result.value;
   } catch (e) {
     console.error('Word parse error:', e.message);
@@ -24,15 +28,14 @@ async function parseWord(filePath) {
   }
 }
 
-function parseTxt(filePath) {
+function parseTxt(input) {
   try {
-    const content = fs.readFileSync(filePath, 'utf-8');
-    return content;
+    if (Buffer.isBuffer(input)) return input.toString('utf-8');
+    return fs.readFileSync(input, 'utf-8');
   } catch (e) {
-    // Try GBK encoding
     try {
       const iconv = require('iconv-lite');
-      const buffer = fs.readFileSync(filePath);
+      const buffer = Buffer.isBuffer(input) ? input : fs.readFileSync(input);
       return iconv.decode(buffer, 'gbk');
     } catch (e2) {
       console.error('TXT parse error:', e2.message);
@@ -113,19 +116,20 @@ function detectChapters(text) {
   return chapters;
 }
 
-async function parseDocument(filePath, fileType) {
+// Accepts either a file path (string) or a buffer
+async function parseDocument(input, fileType) {
   let text = null;
 
   switch (fileType) {
     case 'pdf':
-      text = await parsePDF(filePath);
+      text = await parsePDF(input);
       break;
     case 'docx':
     case 'doc':
-      text = await parseWord(filePath);
+      text = await parseWord(input);
       break;
     case 'txt':
-      text = parseTxt(filePath);
+      text = parseTxt(input);
       break;
     default:
       text = null;

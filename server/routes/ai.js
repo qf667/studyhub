@@ -1,5 +1,5 @@
 const express = require('express');
-const { getOne, getAll, run, lastId } = require('../db');
+const { getOne, getAll, run } = require('../db');
 const { authMiddleware, roleGuard, asyncHandler } = require('../middleware/auth');
 const { generateQuestions: aiGenerateQuestions, chatWithAI } = require('../services/aiService');
 
@@ -66,11 +66,11 @@ router.post('/generate-questions', authMiddleware, roleGuard('admin', 'teacher')
 
   let chapterContent = '';
   if (chapter_id) {
-    const chapter = getOne('SELECT content FROM chapters WHERE id=?', [chapter_id]);
+    const chapter = await getOne('SELECT content FROM chapters WHERE id=?', [chapter_id]);
     chapterContent = chapter ? chapter.content : '';
   }
   if (!chapterContent && material_id) {
-    const material = getOne('SELECT extracted_text FROM materials WHERE id=?', [material_id]);
+    const material = await getOne('SELECT extracted_text FROM materials WHERE id=?', [material_id]);
     chapterContent = material ? material.extracted_text : '';
   }
 
@@ -114,7 +114,7 @@ router.post('/save-questions', authMiddleware, roleGuard('admin', 'teacher'), as
 
   let saved = 0;
   for (const q of questions) {
-    run(
+    await run(
       `INSERT INTO questions (course_id, material_id, chapter_id, type, difficulty, content, options, answer, explanation, knowledge_point, score, source, created_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [course_id || null, material_id || null, chapter_id || null,
@@ -133,38 +133,32 @@ router.post('/chat', authMiddleware, roleGuard('teacher', 'student'), asyncHandl
   const { message, course_id } = req.body;
   if (!message) return res.json({ code: 400, message: '消息不能为空' });
 
-  // Save user message
-  run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
+  await run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
     [req.user.id, course_id || null, 'user', message]);
 
-  // Get course context
   let courseContext = '';
   if (course_id) {
-    const course = getOne('SELECT name, description FROM courses WHERE id=?', [course_id]);
+    const course = await getOne('SELECT name, description FROM courses WHERE id=?', [course_id]);
     if (course) courseContext = `课程名称：${course.name}\n课程描述：${course.description || ''}`;
 
-    // Get recent materials text for context
-    const materials = getAll('SELECT title, extracted_text FROM materials WHERE course_id=? ORDER BY id DESC LIMIT 2', [course_id]);
+    const materials = await getAll('SELECT title, extracted_text FROM materials WHERE course_id=? ORDER BY id DESC LIMIT 2', [course_id]);
     if (materials.length > 0) {
       courseContext += '\n\n教材内容摘要：\n' + materials.map(m => `${m.title}: ${(m.extracted_text || '').substring(0, 500)}`).join('\n');
     }
   }
 
-  // Get chat history for context
-  const history = getAll(
+  const history = (await getAll(
     'SELECT role, content FROM chat_history WHERE user_id=? AND (course_id=? OR (course_id IS NULL AND ? IS NULL)) ORDER BY created_at DESC LIMIT 10',
     [req.user.id, course_id || null, course_id || null]
-  ).reverse();
+  )).reverse();
 
-  // Try real AI
   const aiResponse = await chatWithAI(message, courseContext, history);
 
   let response;
   if (aiResponse) {
     response = aiResponse;
   } else {
-    // Fallback mock response
-    const course = course_id ? getOne('SELECT name FROM courses WHERE id=?', [course_id]) : null;
+    const course = course_id ? await getOne('SELECT name FROM courses WHERE id=?', [course_id]) : null;
     const courseName = course ? course.name : '当前课程';
     const mockResponses = [
       `关于"${message}"这个问题，在《${courseName}》中，我们可以从以下几个角度来理解：\n\n1. **基本概念**：首先需要明确相关的基础定义\n2. **核心原理**：其次理解其背后的运作机制\n3. **实际应用**：最后通过实例加深理解\n\n建议你结合教材内容进行深入学习。`,
@@ -174,8 +168,7 @@ router.post('/chat', authMiddleware, roleGuard('teacher', 'student'), asyncHandl
     response = mockResponses[Math.floor(Math.random() * mockResponses.length)];
   }
 
-  // Save AI response
-  run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
+  await run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
     [req.user.id, course_id || null, 'assistant', response]);
 
   res.json({ code: 200, data: { message: response, source: aiResponse ? 'ai' : 'mock' } });
@@ -186,30 +179,27 @@ router.post('/chat/stream', authMiddleware, roleGuard('teacher', 'student'), asy
   const { message, course_id } = req.body;
   if (!message) return res.json({ code: 400, message: '消息不能为空' });
 
-  // Save user message
-  run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
+  await run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
     [req.user.id, course_id || null, 'user', message]);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
 
-  // Get course context
   let courseContext = '';
   if (course_id) {
-    const course = getOne('SELECT name, description FROM courses WHERE id=?', [course_id]);
+    const course = await getOne('SELECT name, description FROM courses WHERE id=?', [course_id]);
     if (course) courseContext = `课程名称：${course.name}\n课程描述：${course.description || ''}`;
   }
 
-  const history = getAll(
+  const history = (await getAll(
     'SELECT role, content FROM chat_history WHERE user_id=? AND (course_id=? OR (course_id IS NULL AND ? IS NULL)) ORDER BY created_at DESC LIMIT 10',
     [req.user.id, course_id || null, course_id || null]
-  ).reverse();
+  )).reverse();
 
   const aiResponse = await chatWithAI(message, courseContext, history);
   const response = aiResponse || '抱歉，AI服务暂时不可用，请稍后再试。';
 
-  // Simulate streaming by sending chunks
   const words = response.split('');
   let fullResponse = '';
   for (let i = 0; i < words.length; i++) {
@@ -222,8 +212,7 @@ router.post('/chat/stream', authMiddleware, roleGuard('teacher', 'student'), asy
   res.write(`data: ${JSON.stringify({ content: '', done: true })}\n\n`);
   res.end();
 
-  // Save full response
-  run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
+  await run('INSERT INTO chat_history (user_id, course_id, role, content) VALUES (?, ?, ?, ?)',
     [req.user.id, course_id || null, 'assistant', response]);
 }));
 
@@ -234,7 +223,7 @@ router.get('/chat/history', authMiddleware, asyncHandler(async (req, res) => {
   let params = [req.user.id];
   if (course_id) { where += ' AND course_id=?'; params.push(parseInt(course_id)); }
 
-  const history = getAll(
+  const history = await getAll(
     `SELECT * FROM chat_history WHERE ${where} ORDER BY created_at ASC LIMIT 100`,
     params
   );
@@ -243,7 +232,7 @@ router.get('/chat/history', authMiddleware, asyncHandler(async (req, res) => {
 
 // 清空历史
 router.delete('/chat/history', authMiddleware, asyncHandler(async (req, res) => {
-  run('DELETE FROM chat_history WHERE user_id=?', [req.user.id]);
+  await run('DELETE FROM chat_history WHERE user_id=?', [req.user.id]);
   res.json({ code: 200, message: '已清空对话历史' });
 }));
 

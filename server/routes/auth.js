@@ -21,21 +21,21 @@ router.post('/register', asyncHandler(async (req, res) => {
   if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.json({ code: 400, message: '邮箱格式不正确' });
   }
-  const existing = getOne('SELECT id FROM users WHERE username=?', [username]);
+  const existing = await getOne('SELECT id FROM users WHERE username=?', [username]);
   if (existing) {
     return res.json({ code: 400, message: '用户名已存在' });
   }
   if (email) {
-    const existEmail = getOne('SELECT id FROM users WHERE email=?', [email]);
+    const existEmail = await getOne('SELECT id FROM users WHERE email=?', [email]);
     if (existEmail) return res.json({ code: 400, message: '邮箱已被使用' });
   }
   const hash = bcrypt.hashSync(password, 10);
-  run(
+  await run(
     `INSERT INTO users (username, email, phone, password_hash, real_name, role, class_name)
      VALUES (?, ?, ?, ?, ?, 'student', ?)`,
     [username.trim(), email || null, phone || null, hash, real_name || username, class_name || null]
   );
-  const id = lastId();
+  const id = await lastId();
   res.json({ code: 200, message: '注册成功', data: { id } });
 }));
 
@@ -45,7 +45,7 @@ router.post('/login', asyncHandler(async (req, res) => {
   if (!username || !password) {
     return res.json({ code: 400, message: '用户名和密码不能为空' });
   }
-  const user = getOne('SELECT * FROM users WHERE username=?', [username.trim()]);
+  const user = await getOne('SELECT * FROM users WHERE username=?', [username.trim()]);
   if (!user) {
     return res.json({ code: 40001, message: '用户名或密码错误' });
   }
@@ -85,7 +85,7 @@ router.post('/refresh-token', asyncHandler(async (req, res) => {
     if (decoded.type !== 'refresh') {
       return res.json({ code: 401, message: 'Token类型错误' });
     }
-    const user = getOne('SELECT * FROM users WHERE id=?', [decoded.id]);
+    const user = await getOne('SELECT * FROM users WHERE id=?', [decoded.id]);
     if (!user || user.status === 0) {
       return res.json({ code: 401, message: '用户不存在或已禁用' });
     }
@@ -98,7 +98,7 @@ router.post('/refresh-token', asyncHandler(async (req, res) => {
 
 // 获取当前用户信息
 router.get('/me', authMiddleware, asyncHandler(async (req, res) => {
-  const user = getOne(
+  const user = await getOne(
     'SELECT id, username, email, phone, real_name, avatar_url, role, class_name, status, created_at FROM users WHERE id=?',
     [req.user.id]
   );
@@ -112,12 +112,12 @@ router.put('/password', authMiddleware, asyncHandler(async (req, res) => {
   if (!newPassword || newPassword.length < 6) {
     return res.json({ code: 400, message: '新密码长度至少6个字符' });
   }
-  const user = getOne('SELECT password_hash FROM users WHERE id=?', [req.user.id]);
+  const user = await getOne('SELECT password_hash FROM users WHERE id=?', [req.user.id]);
   if (!bcrypt.compareSync(oldPassword, user.password_hash)) {
     return res.json({ code: 400, message: '原密码错误' });
   }
   const hash = bcrypt.hashSync(newPassword, 10);
-  run('UPDATE users SET password_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [hash, req.user.id]);
+  await run('UPDATE users SET password_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', [hash, req.user.id]);
   res.json({ code: 200, message: '密码修改成功' });
 }));
 
