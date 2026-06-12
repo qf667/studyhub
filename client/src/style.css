@@ -1,0 +1,47 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body { font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', Arial, sans-serif; }
+
+/* Light theme (default) */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f0f2f5;
+  --bg-card: #ffffff;
+  --text-primary: #333333;
+  --text-secondary: #666666;
+  --text-muted: #999999;
+  --border-color: #e4e7ed;
+  --sidebar-bg: #304156;
+  --sidebar-text: #bfcbd9;
+  --sidebar-active: #409EFF;
+  --header-bg: #ffffff;
+  --shadow: 0 2px 12px rgba(0,0,0,0.1);
+}
+
+/* Dark theme */
+:root[data-theme="dark"] {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #16213e;
+  --bg-card: #1f2b47;
+  --text-primary: #e0e0e0;
+  --text-secondary: #b0b0b0;
+  --text-muted: #808080;
+  --border-color: #2d3a4a;
+  --sidebar-bg: #0f1629;
+  --sidebar-text: #8892a4;
+  --sidebar-active: #409EFF;
+  --header-bg: #1a1a2e;
+  --shadow: 0 2px 12px rgba(0,0,0,0.3);
+}
+
+body { background: var(--bg-secondary); color: var(--text-primary); }
+
+/* Responsive utilities */
+@media (max-width: 768px) {
+  .hide-on-mobile { display: none !important; }
+  .full-width-mobile { width: 100% !important; }
+}
+
+@media (min-width: 769px) {
+  .show-on-mobile { display: none !important; }
+}

@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  server:
+    build: ./server
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - JWT_SECRET=${JWT_SECRET:-studyhub_secret_change_me}
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_API_URL=${AI_API_URL:-https://api.openai.com/v1/chat/completions}
+      - AI_MODEL=${AI_MODEL:-gpt-3.5-turbo}
+    volumes:
+      - server_data:/app/data
+      - server_uploads:/app/uploads
+    restart: unless-stopped
+
+  client:
+    build: ./client
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+volumes:
+  server_data:
+  server_uploads:
